@@ -2,39 +2,40 @@
 
 MODULE MethodModule
   CONTAINS
-    SUBROUTINE gauss_seidel(A, b, N)
-      REAL *8, ALLOCATABLE, INTENT(in):: A(:,:)
-      REAL *8, ALLOCATABLE, INTENT(inout):: b(:)
+    SUBROUTINE thomas_algorithm(a, b, c, nu, N)
+      REAL *8, ALLOCATABLE, INTENT(in):: a(:), b(:), c(:)
+      REAL *8, ALLOCATABLE, INTENT(inout):: nu(:)
       INTEGER, INTENT(in):: N
       
-      INTEGER:: i, j, iter
-      REAL *8:: aux
-      REAL *8, ALLOCATABLE:: x(:)
       
-      ALLOCATE(x(N))
+      REAL *8, ALLOCATABLE:: x(:), bb(:)
+      REAL *8:: t
+      INTEGER:: i
+      
+      ALLOCATE(x(N), bb(N))
+            
+      DO i=1, N
+        bb(i) = b(i)
+      ENDDO
+      
+      DO i=2, N
+        t = a(i) / bb(i-1)
+        bb(i) = bb(i) - (C(i-1) * t)
+        nu(i) = nu(i) - (nu(i-1) * t)
+      ENDDO
+      
+      x(N) = nu(N) / bb(N)
+      DO i=N-1, 1, -1
+        x(i) = (nu(i) - c(i) * x(i+1)) / bb(i)
+      ENDDO
       
       DO i=1, N
-        x(i) = 1.0
+        nu(i) = x(i)
       ENDDO
       
-      DO iter=5*N, 1, -1
-        DO i=1, N
-          aux = 0.0
-          DO j=1, N
-            IF (j .NE. i) THEN
-              aux = aux + (A(i,j) * x(j))
-            ENDIF
-            x(i) = (b(i) - aux) / A(i,i)
-          ENDDO
-        ENDDO
-      ENDDO
-      
-      DO i=1, N
-        b(i) = x(i)
-      ENDDO
-      DEALLOCATE(x)
+      DEALLOCATE(x, bb)
       RETURN
-    END SUBROUTINE gauss_seidel
+    END SUBROUTINE thomas_algorithm
 
     REAL *8 FUNCTION infinity_norm(nu, an, N)
       REAL *8, ALLOCATABLE, INTENT(in):: nu(:)
@@ -115,33 +116,27 @@ MODULE ArrayModule
       RETURN
     END SUBROUTINE fill_values
 
-    SUBROUTINE create_diag(A, N, s)
-      REAL *8, ALLOCATABLE, INTENT(inout):: A(:,:)
+    SUBROUTINE create_diag(a, b, c, N, s)
+      REAL *8, ALLOCATABLE, INTENT(inout):: a(:), b(:), c(:)
       REAL *8, INTENT(in):: s
       INTEGER, INTENT(in):: N
 
-      INTEGER:: i, j
+      INTEGER:: i
 
       DO i=1, N
-        DO j=1, N
-          IF (i .EQ. j) THEN
-            A(i, j) = (1.0 + 2.0*s)
-          ELSE IF ((j .EQ. i-1) .OR. (j .EQ. i+1)) THEN
-            A(i, j) = -s
-          ELSE
-            A(i, j) = 0.0
-          ENDIF
-        ENDDO
-      ENDDO
-
-      DO i=1, N
-        A(1,i) = 0.0
-        A(N, i) = 0.0
+        a(i) = -s
+        b(i) = (1.0 + 2.0*s)
+        c(i) = -s
       ENDDO
       
-      A(1,1) = 1.0
-      A(N, N) = 1.0
-
+      a(1) = 0.0
+      b(1) = 1.0
+      c(1) = 0.0
+      
+      a(N) = 0.0
+      b(N) = 1.0
+      c(N) = 0.0
+      
       RETURN
     END SUBROUTINE create_diag
 END MODULE ArrayModule
@@ -153,7 +148,9 @@ PROGRAM crank_nicolson
   USE ArrayModule
 
   REAL *8:: L, dx, dt, s
-  REAL *8, ALLOCATABLE:: A(:,:)
+  REAL *8, ALLOCATABLE:: a(:)
+  REAL *8, ALLOCATABLE:: b(:)
+  REAL *8, ALLOCATABLE:: c(:)
   REAL *8, ALLOCATABLE:: nu(:)
   REAL *8, ALLOCATABLE:: an(:)
   REAL *8, ALLOCATABLE:: x(:)
@@ -161,18 +158,18 @@ PROGRAM crank_nicolson
   INTEGER:: N, o, ts, i
   
 
-  DO o=2, 7
+  DO o=2, 14
     N = 2 ** o
 
     ts = 100
-    dt = 0.001
+    dt = 0.000001
     L = 2.0 * ACOS(DBLE(-1.0))
     dx = L / (N - 1)
     s = dt / (2.0 * (dx * dx))
 
-    ALLOCATE(nu(N), an(N), x(N), A(N, N), erro(ts))
+    ALLOCATE(nu(N), an(N), x(N), a(N), b(N), c(N), erro(ts))
 
-    CALL create_diag(A, N, s)
+    CALL create_diag(a, b, c, N, s)
     CALL initial_value(nu, dx, N)
     CALL initial_value(an, dx, N)
 
@@ -180,12 +177,12 @@ PROGRAM crank_nicolson
       erro(i) = infinity_norm(nu, an, N)
       CALL fill_values(an, N, dx, i * dt)
       CALL right_hand_updt(nu, N, s)
-      CALL gauss_seidel(A, nu, N)
+      CALL thomas_algorithm(a, b, c, nu, N)
     ENDDO
 
     PRINT *, MAXVAL(erro)
 
-    DEALLOCATE(nu, an, x, A, erro)
+    DEALLOCATE(nu, an, x, a, b, c, erro)
 
   ENDDO
 END PROGRAM crank_nicolson
