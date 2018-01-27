@@ -102,6 +102,7 @@ module functions_module
           write (2,*) i, j, an(i, j)
         end do
       end do
+      close(2)
 
       return
     end subroutine save_analytic
@@ -120,7 +121,8 @@ module functions_module
           write (2,*) i, j, nu(i, j)
         end do
       end do
-
+      close(2)
+      
       return
     end subroutine save_numeric
 
